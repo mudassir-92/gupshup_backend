@@ -36,7 +36,8 @@ io.on('connection',socket => {
             if(sidOfB){ // means is actually registered
                 // notify user B
                 socket.to(sidOfB).emit('incomming_call',{from});
-            }
+            }else{
+                socket.emit('404');
         });
         // as it was emitted to B if B accepts the call
         // it emmits a eveent to A that call is accepted ,passive  from is B now and to is A
