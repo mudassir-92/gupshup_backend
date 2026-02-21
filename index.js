@@ -30,7 +30,7 @@ io.on('connection',socket => {
 
         // call user
         // USER A is caller
-        socket.on('call_user',(from,to)=>{
+        socket.on('call_user',({from ,to})=>{
             console.log('call user from ',from,' to ',to);
              // if a is current user force it
             let sidOfB=users[to];
