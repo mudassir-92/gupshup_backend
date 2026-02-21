@@ -31,6 +31,7 @@ io.on('connection',socket => {
         // call user
         // USER A is caller
         socket.on('call_user',(from,to)=>{
+            console.log('call user from ',from,' to ',to);
              // if a is current user force it
             let sidOfB=users[to];
             if(sidOfB){ // means is actually registered
@@ -43,6 +44,7 @@ io.on('connection',socket => {
         // as it was emitted to B if B accepts the call
         // it emmits a eveent to A that call is accepted ,passive  from is B now and to is A
         socket.on('call_accepted',({from ,to})=>{
+            console.log('call accepted from ',from,' to ',to);
             let sidOfA=users[to];
             if(sidOfA){ // 100% exists kray gi lkn :haha
                 // make a room of A and B
@@ -53,6 +55,7 @@ io.on('connection',socket => {
         });
 
         socket.on('call_rejected',({from ,to})=>{
+            console.log('cakk rejected from ',from,' to ',to);
             let sidOfA=users[to];
             if(sidOfA){ // 100% exists kray gi lkn :haha
                 // make a room of A and B
