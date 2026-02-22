@@ -34,10 +34,13 @@ io.on('connection',socket => {
             console.log('call user from ',from,' to ',to);
              // if a is current user force it
             let sidOfB=users[to];
+            console.log('found socket id of B as ',sidOfB);
             if(sidOfB){ // means is actually registered
                 // notify user B
+                 console.log('notifieng user B');
                 socket.to(sidOfB).emit('incomming_call',{from});
             }else{
+                
                 socket.emit('404');
             }
         });
