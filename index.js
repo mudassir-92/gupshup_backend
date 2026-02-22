@@ -1,105 +1,123 @@
-// import all needed libs bro
-const  express=require('express')
-const  {Server}=require('socket.io')
-const  http=require('http')
-const {use} = require("express/lib/application");
+const express = require('express');
+const { Server } = require('socket.io');
+const http = require('http');
 
-// app bnao express ki
-const app=express();
-// make http server too and pass the app
-const server=http.createServer(app);
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*', // lock this down in production
+    methods: ['GET', 'POST'],
+  },
+});
 
-// make a socket and pass the   server to it
-const  io=new Server(server);
+// userId -> socketId mapping
+const users = {};
 
-function  getRoomName(a,b){
-    return [a,b].sort().join('_'); // sort to avoid duplicates
+// Consistent room name for any two users
+function getRoomName(a, b) {
+  return [a, b].sort().join('_');
 }
 
-const users={}; // map id to socket id
-// now jb bhi koi is server se connect hoga to usko ik id assign hogi
-// later on connect honay ke baad woh koi room bhi join krskta
-io.on('connection',socket => {
-        console.log('connected on ',socket.id);
+// Helper: find socket id of a user
+function getSocketId(userId) {
+  return users[userId] ?? null;
+}
 
-        // register every user bro
-        socket.on('register',(userId)=>{
-            users[userId]=socket.id;
-            console.log("User registered",userId);
-        });
-
-        // call user
-        // USER A is caller
-        socket.on('call_user',({from ,to})=>{
-            console.log('call user from ',from,' to ',to);
-             // if a is current user force it
-            let sidOfB=users[to];
-            console.log('found socket id of B as ',sidOfB);
-            if(sidOfB){ // means is actually registered
-                // notify user B
-                 console.log('notifieng user B');
-                io.to(sidOfB).emit('incomming_call',{from});
-            }else{
-                
-                socket.emit('404');
-            }
-        });
-        // as it was emitted to B if B accepts the call
-        // it emmits a eveent to A that call is accepted ,passive  from is B now and to is A
-        socket.on('call_accepted',({from ,to})=>{
-            console.log('call accepted from ',from,' to ',to);
-            let sidOfA=users[to];
-            if(sidOfA){ // 100% exists kray gi lkn :haha
-                // make a room of A and B
-                socket.join(getRoomName(from,to));
-                // emit it to user A CLient Side
-                io.to(sidOfA).emit('call_accepted',{from});
-            }
-        });
-
-        socket.on('call_rejected',({from ,to})=>{
-            console.log('cakk rejected from ',from,' to ',to);
-            let sidOfA=users[to];
-            if(sidOfA){ // 100% exists kray gi lkn :haha
-                // make a room of A and B
-                socket.join(getRoomName(from,to));
-                // emit it to user A CLient Side
-                io.to(sidOfA).emit('call_rejected',{from});
-            }
-        });
-
-        // if call was accepted BY B and A recived eventt abt call accpeted then it joins the same room which B
-       // has already joined
-        socket.on('join',(a,b)=>{
-            socket.join(getRoomName(a,b));
-        });
-
-
-        // as join hogay hain now they can share offer
-        // Offer Relay hona abb
-        socket.on('offer',(from,to,offer)=>{
-            console.log('redirecting offer from ',from,' to ',to);
-           io.to(getRoomName(from,to)).emit('offer',offer);
-        });
-
-        //
-        socket.on('answer',(from,to,answer)=>{
-            console.log('answer from ',from,' to ',to);
-            io.to(getRoomName(from,to)).emit('answer',answer);
-        });
-        // now IF answer was good we need a channel to share ICE candidates
-        socket.on('ICE',(from,to,ICEs)=>{
-            console.log('ICE from ',from,' to ',to);
-            io.to(getRoomName(from,to)).emit('ICE',ICEs);
-        });
-        socket.on('disconnect',()=>{
-           for (let id in users){
-               if(users[id]===socket.id) delete users[id];
-           }
-           console.log('disconnected',socket.id);
-        });
+// Helper: remove user from map by socket id on disconnect
+function removeUserBySocketId(socketId) {
+  for (let userId in users) {
+    if (users[userId] === socketId) {
+      delete users[userId];
+      console.log(`User unregistered: ${userId}`);
+      return;
     }
-);
-server.listen(8000,() => {
-   console.log('Server Started');
+  }
+}
+
+io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
+  // ─── Register ───────────────────────────────────────────────
+  socket.on('register', (userId) => {
+    users[userId] = socket.id;
+    console.log(`Registered: ${userId} -> ${socket.id}`);
+  });
+
+  // ─── Call User (A -> B) ──────────────────────────────────────
+  // A emits call_user, server notifies B
+  socket.on('call_user', ({ from, to }) => {
+    console.log(`call_user: ${from} -> ${to}`);
+    const sidOfB = getSocketId(to);
+
+    if (sidOfB) {
+      io.to(sidOfB).emit('incoming_call', { from });
+    } else {
+      socket.emit('user_not_found', { userId: to });
+    }
+  });
+
+  // ─── Call Accepted (B -> A) ──────────────────────────────────
+  // B accepted, B joins the room, then notifies A to join too
+  socket.on('call_accepted', ({ from, to }) => {
+    console.log(`call_accepted: ${from} accepted call from ${to}`);
+    const sidOfA = getSocketId(to);
+    const room = getRoomName(from, to);
+
+    socket.join(room); // B joins room
+    console.log(`${from} joined room: ${room}`);
+
+    if (sidOfA) {
+      io.to(sidOfA).emit('call_accepted', { from });
+      // A will emit 'join' next to enter the same room
+    }
+  });
+
+  // ─── Call Rejected (B -> A) ──────────────────────────────────
+  socket.on('call_rejected', ({ from, to }) => {
+    console.log(`call_rejected: ${from} rejected call from ${to}`);
+    const sidOfA = getSocketId(to);
+
+    if (sidOfA) {
+      io.to(sidOfA).emit('call_rejected', { from });
+    }
+  });
+
+  // ─── Join Room (A joins after receiving call_accepted) ───────
+  socket.on('join', ({ a, b }) => {
+    const room = getRoomName(a, b);
+    socket.join(room);
+    console.log(`${a} joined room: ${room}`);
+  });
+
+  // ─── WebRTC Signaling ────────────────────────────────────────
+
+  // A sends offer to room, B receives it
+  socket.on('offer', ({ from, to, offer }) => {
+    console.log(`offer: ${from} -> ${to}`);
+    // emit to everyone in room EXCEPT sender
+    socket.to(getRoomName(from, to)).emit('offer', { offer, from });
+  });
+
+  // B sends answer to room, A receives it
+  socket.on('answer', ({ from, to, answer }) => {
+    console.log(`answer: ${from} -> ${to}`);
+    socket.to(getRoomName(from, to)).emit('answer', { answer, from });
+  });
+
+  // Both sides relay ICE candidates through the room
+  socket.on('ICE', ({ from, to, candidate }) => {
+    console.log(`ICE candidate: ${from} -> ${to}`);
+    socket.to(getRoomName(from, to)).emit('ICE', { candidate, from });
+  });
+
+  // ─── Disconnect ──────────────────────────────────────────────
+  socket.on('disconnect', () => {
+    removeUserBySocketId(socket.id);
+    console.log(`Socket disconnected: ${socket.id}`);
+  });
+});
+
+server.listen(8000, () => {
+  console.log('Signaling server running on port 8000');
 });
