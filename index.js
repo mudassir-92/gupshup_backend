@@ -38,7 +38,7 @@ io.on('connection',socket => {
             if(sidOfB){ // means is actually registered
                 // notify user B
                  console.log('notifieng user B');
-                socket.to(sidOfB).emit('incomming_call',{from});
+                io.to(sidOfB).emit('incomming_call',{from});
             }else{
                 
                 socket.emit('404');
@@ -53,7 +53,7 @@ io.on('connection',socket => {
                 // make a room of A and B
                 socket.join(getRoomName(from,to));
                 // emit it to user A CLient Side
-                socket.to(sidOfA).emit('call_accepted',{from});
+                io.to(sidOfA).emit('call_accepted',{from});
             }
         });
 
@@ -64,7 +64,7 @@ io.on('connection',socket => {
                 // make a room of A and B
                 socket.join(getRoomName(from,to));
                 // emit it to user A CLient Side
-                socket.to(sidOfA).emit('call_rejected',{from});
+                io.to(sidOfA).emit('call_rejected',{from});
             }
         });
 
@@ -79,18 +79,18 @@ io.on('connection',socket => {
         // Offer Relay hona abb
         socket.on('offer',(from,to,offer)=>{
             console.log('redirecting offer from ',from,' to ',to);
-           socket.to(getRoomName(from,to)).emit('offer',offer);
+           io.to(getRoomName(from,to)).emit('offer',offer);
         });
 
         //
         socket.on('answer',(from,to,answer)=>{
             console.log('answer from ',from,' to ',to);
-            socket.to(getRoomName(from,to)).emit('answer',answer);
+            io.to(getRoomName(from,to)).emit('answer',answer);
         });
         // now IF answer was good we need a channel to share ICE candidates
         socket.on('ICE',(from,to,ICEs)=>{
             console.log('ICE from ',from,' to ',to);
-            socket.to(getRoomName(from,to)).emit('ICE',ICEs);
+            io.to(getRoomName(from,to)).emit('ICE',ICEs);
         });
         socket.on('disconnect',()=>{
            for (let id in users){
